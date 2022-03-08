@@ -54,7 +54,6 @@ class TestScaleOp(AutoScanTest):
             Place(TargetType.Host, PrecisionType.FP32)
         ]
         self.enable_testing_on_place(places=opencl_places)
-        # metal demo
         metal_places = [
             Place(TargetType.Metal, PrecisionType.FP32,
                   DataLayoutType.MetalTexture2DArray),
@@ -64,39 +63,23 @@ class TestScaleOp(AutoScanTest):
             Place(TargetType.Host, PrecisionType.FP32)
         ]
         self.enable_testing_on_place(places=metal_places)
+        self.enable_testing_on_place(
+            TargetType.ARM,
+            PrecisionType.FP16,
+            DataLayoutType.NCHW,
+            thread=[1, 4])
+        self.enable_testing_on_place(TargetType.NNAdapter, PrecisionType.FP32)
+        self.enable_devices_on_nnadapter(
+            device_names=["kunlunxin_xtcl", "cambricon_mlu"])
 
     def is_program_valid(self,
                          program_config: ProgramConfig,
                          predictor_config: CxxConfig) -> bool:
-
-        return False  # fix arm_opencl ci error
-
+        x_dtype = program_config.inputs["input_data"].dtype
         target_type = predictor_config.target()
-        in_shape = list(program_config.inputs["input_data"].shape)
-        in_data_type = program_config.inputs["input_data"].dtype
-        if "int8" == in_data_type:
-            print("int8 as Input data type is not supported.")
-            return False
-
-        if target_type not in [TargetType.OpenCL, TargetType.Metal]:
+        if target_type in [TargetType.ARM]:
             if predictor_config.precision(
-            ) == PrecisionType.FP16 and in_data_type != np.float16:
-                return False
-            elif predictor_config.precision(
-            ) == PrecisionType.FP32 and in_data_type != np.float32:
-                return False
-        if target_type == TargetType.Metal and in_data_type not in [
-                np.float16, np.float32
-        ]:
-            return False
-
-        if "ScaleTensor" in program_config.inputs:
-            print("ScaleTensor as Input is not supported on Paddle Lite.")
-            return False
-        if predictor_config.target() == TargetType.Host:
-            return False
-        if predictor_config.target() == TargetType.OpenCL:
-            if len(in_shape) != 4 or in_data_type != "float32":
+            ) == PrecisionType.FP16 and x_dtype != np.float32:
                 return False
         return True
 
@@ -104,7 +87,7 @@ class TestScaleOp(AutoScanTest):
         in_shape = draw(
             st.lists(
                 st.integers(
-                    min_value=1, max_value=8), min_size=1, max_size=6))
+                    min_value=1, max_value=8), min_size=1, max_size=4))
         bias = draw(st.floats(min_value=-5, max_value=5))
         bias_after_scale = draw(st.booleans())
         scale = draw(st.floats(min_value=-5, max_value=5))
@@ -164,16 +147,51 @@ class TestScaleOp(AutoScanTest):
         return program_config
 
     def sample_predictor_configs(self):
-        return self.get_predictor_configs(), ["scale"], (1e-5, 1e-5)
+        atol, rtol = 1e-5, 1e-5
+        target_str = self.get_target()
+        if target_str == "Metal":
+            atol, rtol = 1e-2, 1e-2
+        return self.get_predictor_configs(), ["scale"], (atol, rtol)
 
     def add_ignore_pass_case(self):
-        pass
+        def _teller1(program_config, predictor_config):
+            target_type = predictor_config.target()
+            in_shape = list(program_config.inputs["input_data"].shape)
+            in_data_type = program_config.inputs["input_data"].dtype
+            if target_type == TargetType.Metal:
+                if len(in_shape) != 4 or in_data_type != "float32":
+                    return True
+
+        def _teller2(program_config, predictor_config):
+            target_type = predictor_config.target()
+            if target_type == TargetType.Metal:
+                return True
+
+        def _teller3(program_config, predictor_config):
+            target_type = predictor_config.target()
+            x_dtype = program_config.inputs["input_data"].dtype
+            if target_type == TargetType.OpenCL:
+                if x_dtype == np.int32 or x_dtype == np.int64:
+                    return True
+
+        self.add_ignore_check_case(
+            _teller1, IgnoreReasons.PADDLELITE_NOT_SUPPORT,
+            "Lite does not support this op in a specific case. We need to fix it as soon as possible."
+        )
+        self.add_ignore_check_case(
+            _teller2, IgnoreReasons.ACCURACY_ERROR,
+            "The op output has diff in a specific case on metal. We need to fix it as soon as possible."
+        )
+        self.add_ignore_check_case(
+            _teller3, IgnoreReasons.PADDLELITE_NOT_SUPPORT,
+            "Lite does not support this op when dtype is int32 or int64 on Opencl. "
+        )
 
     def test(self, *args, **kwargs):
         target_str = self.get_target()
-        max_examples = 25
-        if target_str == "OpenCL":
-            # Make sure to generate enough valid cases for OpenCL
+        max_examples = 100
+        if target_str in ["OpenCL", "Metal"]:
+            # Make sure to generate enough valid cases for specific targets
             max_examples = 2000
         self.run_and_statis(
             quant=False, min_success_num=25, max_examples=max_examples)

@@ -37,7 +37,6 @@
 #include "lite/backends/arm/math/gemm_prepacked_int8.h"
 #include "lite/backends/arm/math/gemm_s8.h"
 #include "lite/backends/arm/math/gemv_arm_int8.h"
-#include "lite/backends/arm/math/im2sequence.h"
 #include "lite/backends/arm/math/interpolate.h"
 #include "lite/backends/arm/math/layout.h"
 #include "lite/backends/arm/math/lrn.h"
@@ -65,6 +64,7 @@
 #include "lite/backends/arm/math/slice.h"
 #include "lite/backends/arm/math/softmax.h"
 #include "lite/backends/arm/math/sparse_conv_impl.h"
+#include "lite/backends/arm/math/sparse_semi_conv_impl.h"
 #include "lite/backends/arm/math/split_merge_lod_tenosr.h"
 
 namespace paddle {

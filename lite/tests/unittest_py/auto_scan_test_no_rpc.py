@@ -63,12 +63,27 @@ def ParsePaddleLiteConfig(self, config):
         lite_config.set_valid_places(valid_places)
     if "thread" in config:
         lite_config.set_threads(config["thread"])
+    if self.get_target().upper() == "NNADAPTER":
+        lite_config.set_nnadapter_device_names(
+            self.args.nnadapter_device_names.split(","))
+        lite_config.set_nnadapter_context_properties(
+            self.args.nnadapter_context_properties)
+        lite_config.set_nnadapter_model_cache_dir(
+            self.args.nnadapter_model_cache_dir)
+        lite_config.set_nnadapter_subgraph_partition_config_path(
+            self.args.nnadapter_subgraph_partition_config_path)
+        lite_config.set_nnadapter_mixed_precision_quantization_config_path(
+            self.args.nnadapter_mixed_precision_quantization_config_path)
     return lite_config
 
 
 class AutoScanTest(AutoScanBaseTest):
-    def run_lite_config(self, model, params, inputs,
-                        pred_config) -> Dict[str, np.ndarray]:
+    def run_lite_config(self,
+                        model,
+                        params,
+                        inputs,
+                        pred_config,
+                        server_ip="localhost") -> Dict[str, np.ndarray]:
         # 1. store original model
         with open(self.cache_dir + "/model", "wb") as f:
             f.write(model)
@@ -80,6 +95,11 @@ class AutoScanTest(AutoScanBaseTest):
         config.set_model_buffer(model, len(model), params, len(params))
         predictor = create_paddle_predictor(config)
 
+        # 3. optimized model
+        predictor.save_optimized_pb_model(self.cache_dir + "/opt_model/")
+        with open(self.cache_dir + "/opt_model/model", "rb") as f:
+            model = f.read()
+
         for name in inputs:
             input_tensor = predictor.get_input_by_name(name)
             input_tensor.from_numpy(inputs[name]['data'])
@@ -87,16 +107,11 @@ class AutoScanTest(AutoScanBaseTest):
                 input_tensor.set_lod(inputs[name]['lod'])
         predictor.run()
 
-        # 3. inference results
+        # 4. inference results
         result = {}
         for out_name in predictor.get_output_names():
             result[out_name] = predictor.get_output_by_name(out_name).numpy()
         result_res = copy.deepcopy(result)
-
-        # 4. optimized model
-        predictor.save_optimized_pb_model(self.cache_dir + "/opt_model/")
-        with open(self.cache_dir + "/opt_model/model", "rb") as f:
-            model = f.read()
 
         return result_res, model
 
@@ -107,8 +122,7 @@ class FusePassAutoScanTest(AutoScanTest):
                        max_examples=100,
                        reproduce=None,
                        min_success_num=25,
-                       max_duration=180,
                        passes=None):
         assert passes is not None, "Parameter of passes must be defined in function run_and_statis."
         super().run_and_statis(quant, max_examples, reproduce, min_success_num,
-                               max_duration, passes)
+                               passes)

@@ -301,20 +301,30 @@ void test_slice_tensor_list(Place place) {
 }
 
 TEST(Slice, precision) {
-#if defined(LITE_WITH_NNADAPTER) && defined(NNADAPTER_WITH_HUAWEI_ASCEND_NPU)
+#if defined(LITE_WITH_NNADAPTER)
   Place place = TARGET(kNNAdapter);
+#if defined(NNADAPTER_WITH_HUAWEI_ASCEND_NPU)
   test_slice(place);
   test_slice_axes(place);
   test_slice_decrease_axis(place);
+#elif defined(NNADAPTER_WITH_VERISILICON_TIMVX)
+  test_slice(place);
+  test_slice_axes(place);
+#elif defined(NNADAPTER_WITH_CAMBRICON_MLU)
+  test_slice(place);
+  test_slice_axes(place);
+  test_slice_decrease_axis(place);
+#elif defined(NNADAPTER_WITH_HUAWEI_KIRIN_NPU)
+  test_slice(place);
+  test_slice_axes(place);
+  test_slice_decrease_axis(place);
+#endif
 #elif defined(LITE_WITH_OPENCL)
   Place place = TARGET(kOpenCL);
   test_slice(place);
   test_slice_tensor(place);
   test_slice_tensor_list(place);
-#elif defined(LITE_WITH_XPU) && defined(LITE_WITH_XTCL)
-  Place place(TARGET(kXPU));
-  test_slice(place);
-#elif defined(LITE_WITH_XPU) && !defined(LITE_WITH_XTCL)
+#elif defined(LITE_WITH_XPU)
   Place place(TARGET(kXPU));
   test_slice(place);
   test_slice_tensor(place);

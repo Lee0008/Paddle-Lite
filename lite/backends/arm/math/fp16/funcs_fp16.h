@@ -32,7 +32,6 @@
 #include "lite/backends/arm/math/fp16/pad2d_fp16.h"
 #include "lite/backends/arm/math/fp16/pooling_fp16.h"
 #include "lite/backends/arm/math/fp16/sgemm_fp16.h"
-#include "lite/backends/arm/math/fp16/shuffle_channel_fp16.h"
 #include "lite/backends/arm/math/fp16/softmax_fp16.h"
 #include "lite/backends/arm/math/fp16/type_trans_fp16.h"
 #include "lite/backends/arm/math/funcs.h"
@@ -50,8 +49,8 @@ void fill_bias_fc(
 
 // exp() computed for 8 float at once
 inline float16x8_t expq_ps_f16(float16x8_t x) {
-  float32x4_t va = vcvt_f32_f16(vget_high_f16(x));
-  float32x4_t vb = vcvt_f32_f16(vget_low_f16(x));
+  float32x4_t va = vcvt_f32_f16(vget_low_f16(x));
+  float32x4_t vb = vcvt_f32_f16(vget_high_f16(x));
   float32x4_t vexpa = exp_ps(va);
   float32x4_t vexpb = exp_ps(vb);
   return vcombine_f16(vcvt_f16_f32(vexpa), vcvt_f16_f32(vexpb));

@@ -99,6 +99,14 @@ void UpdateInputOutputScales(
       if (in_out_scales.count(out_var_name)) {
         op_info->SetOutputScale(out_var_name, {in_out_scales.at(out_var_name)});
       }
+      for (auto* out_op_node : out_var_node->outlinks) {
+        if (!out_op_node->IsStmt()) continue;
+        auto out_op_info = out_op_node->AsStmt().mutable_op_info();
+        if (in_out_scales.count(out_var_name)) {
+          out_op_info->SetInputScale(
+              out_var_name, {in_out_scales.at(out_var_name)}, false);
+        }
+      }
     }
   }
 }

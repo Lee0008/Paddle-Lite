@@ -30,31 +30,40 @@ import numpy as np
 class TestFcOp(AutoScanTest):
     def __init__(self, *args, **kwargs):
         AutoScanTest.__init__(self, *args, **kwargs)
-        self.enable_testing_on_place(TargetType.X86, PrecisionType.FP32,
-                                     DataLayoutType.NCHW)
-        # opencl demo
+        self.enable_testing_on_place(
+            TargetType.X86,
+            PrecisionType.FP32,
+            DataLayoutType.NCHW,
+            thread=[1, 4])
+        self.enable_testing_on_place(
+            TargetType.ARM,
+            PrecisionType.FP32,
+            DataLayoutType.NCHW,
+            thread=[1, 4])
+        self.enable_testing_on_place(
+            TargetType.ARM,
+            PrecisionType.FP16,
+            DataLayoutType.NCHW,
+            thread=[1, 4])
         opencl_places = [
             Place(TargetType.OpenCL, PrecisionType.FP16,
-                  DataLayoutType.ImageDefault), Place(
-                      TargetType.OpenCL, PrecisionType.FP16,
-                      DataLayoutType.ImageFolder),
+                  DataLayoutType.ImageFolder),
             Place(TargetType.OpenCL, PrecisionType.FP32, DataLayoutType.NCHW),
             Place(TargetType.OpenCL, PrecisionType.Any,
-                  DataLayoutType.ImageDefault), Place(
-                      TargetType.OpenCL, PrecisionType.Any,
-                      DataLayoutType.ImageFolder),
+                  DataLayoutType.ImageFolder),
             Place(TargetType.OpenCL, PrecisionType.Any, DataLayoutType.NCHW),
             Place(TargetType.Host, PrecisionType.FP32)
         ]
         self.enable_testing_on_place(places=opencl_places)
+        self.enable_testing_on_place(TargetType.NNAdapter, PrecisionType.FP32)
+        self.enable_devices_on_nnadapter(device_names=[
+            "kunlunxin_xtcl", "cambricon_mlu", "nvidia_tensorrt"
+        ])
 
     def is_program_valid(self,
                          program_config: ProgramConfig,
                          predictor_config: CxxConfig) -> bool:
-        if predictor_config.target() == TargetType.OpenCL:
-            return False
-        else:
-            return True
+        return True
 
     def sample_program_configs(self, draw):
         in_shape = draw(
@@ -72,6 +81,13 @@ class TestFcOp(AutoScanTest):
             else:
                 weights_0 = weights_0 * in_shape[i]
         weights_shape = [weights_0, weights_1]
+        padding_weights = draw(st.booleans())
+        # OpenCL and ARM dose not support this attribute
+        if (self.get_target() in ['OpenCL', 'ARM']):
+            padding_weights = False
+        if (padding_weights):
+            weights_shape = [weights_0 + 4, weights_1 + 4]
+
         bias_shape = [weights_1]
         with_bias = draw(st.sampled_from([True, False]))
 
@@ -121,7 +137,7 @@ class TestFcOp(AutoScanTest):
                 "in_num_col_dims": in_num_col_dims,
                 "activation_type": act_type,
                 "use_mkldnn": False,
-                "padding_weights": False,
+                "padding_weights": padding_weights,
                 "use_quantizer": False,
                 "Scale_in": float(1),
                 "Scale_weights": [float(1)],
@@ -141,7 +157,7 @@ class TestFcOp(AutoScanTest):
         pass
 
     def test(self, *args, **kwargs):
-        self.run_and_statis(quant=False, max_examples=25)
+        self.run_and_statis(quant=False, max_examples=300)
 
 
 if __name__ == "__main__":

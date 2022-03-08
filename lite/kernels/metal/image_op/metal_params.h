@@ -108,6 +108,7 @@ struct MulMetalParam {};
 struct MatmulMetalParam {
     bool transposeX;
     bool transposeY;
+    bool broadcast;
 };
 
 struct FCMetalParam {
@@ -184,6 +185,10 @@ struct HardSigmoidMetalParam {
     float offset;
 };
 
+struct SwishMetalParam {
+    float beta;
+};
+
 struct HardSwishMetalParam {
     float offset;
     float threshold;
@@ -249,19 +254,19 @@ struct ConvTransposeAddMetalParam {
     uint16_t oC;
     uint16_t hasAddOp;
     ElementwiseAddMetalParam addParam;
+    ActivationMetalParam activationParam;
 };
 
 struct SliceMetalParam {
-    uint16_t start0;
-    uint16_t start1;
-    uint16_t start2;
-    uint16_t start3;
-    uint16_t end0;
-    uint16_t end1;
-    uint16_t end2;
-    uint16_t end3;
-    int iC;
-    int oC;
+    int iW;
+    int iH;
+    int oW;
+    int oH;
+    int isize;
+    int osize;
+    int oarraysize;
+    int start[4];
+    int endC;
 };
 
 struct FeedMetalParam {

@@ -45,6 +45,11 @@ enum class L3CacheSetMethod {
 // return true if current device supports OpenCL model
 LITE_API bool IsOpenCLBackendValid(bool check_fp16_valid = false);
 
+// return current opencl device type,
+// if opencl not enabled or IsOpenCLBackendValid return false, it will return -1
+// UNKNOWN:0, QUALCOMM_ADRENO:1, ARM_MALI:2, IMAGINATION_POWERVR:3, OTHERS:4,
+LITE_API int GetOpenCLDeviceType();
+
 struct LITE_API Tensor {
   explicit Tensor(void* raw);
   explicit Tensor(const void* raw);
@@ -162,6 +167,9 @@ class LITE_API ConfigBase {
   std::string nnadapter_context_properties_{};
   // The directory to find and store the compiled NNAdapter models.
   std::string nnadapter_model_cache_dir_{""};
+  // Dynamic shapes of the NNAdapter model
+  std::map<std::string, std::vector<std::vector<int64_t>>>
+      nnadapter_dynamic_shape_info_;
   // The buffers for loading the compiled NNAdapter models from memory.
   std::map<std::string, std::vector<char>> nnadapter_model_cache_buffers_{};
   int device_id_{0};
@@ -186,6 +194,7 @@ class LITE_API ConfigBase {
   // set Power_mode
   void set_power_mode(PowerMode mode);
   PowerMode power_mode() const { return mode_; }
+
   /// \brief Set path and file name of generated OpenCL compiled kernel binary.
   ///
   /// If you use GPU of specific soc, using OpenCL binary will speed up the
@@ -197,14 +206,41 @@ class LITE_API ConfigBase {
   /// \return void
   void set_opencl_binary_path_name(const std::string& path,
                                    const std::string& name);
-  // set GPU opencl tune
+
+  /// \brief Set path and file name of generated OpenCL algorithm selecting
+  /// file.
+  ///
+  /// If you use GPU of specific soc, using OpenCL binary will speed up the
+  /// running time in most cases. But the first running for algorithm selecting
+  /// is timg-costing.
+  ///
+  /// \param tune_mode  Set a tune mode:
+  ///        CL_TUNE_NONE: turn off
+  ///        CL_TUNE_RAPID: find the optimal algorithm in a rapid way(less
+  ///        time-cost)
+  ///        CL_TUNE_NORMAL: find the optimal algorithm in a noraml
+  ///        way(suggestion)
+  ///        CL_TUNE_EXHAUSTIVE: find the optimal algorithm in a exhaustive
+  ///        way(most time-costing)
+  /// \param path  Path that OpenCL algorithm selecting file stores in. Make
+  /// sure the path exist and you have Read&Write permission.
+  /// \param name  File name of OpenCL algorithm selecting file.
+  /// \param lws_repeats  Repeat number for find the optimal local work size .
+  /// \return void
   void set_opencl_tune(CLTuneMode tune_mode = CL_TUNE_NONE,
                        const std::string& path = "",
                        const std::string& name = "",
                        size_t lws_repeats = 4);
 
-  // set GPU opencl precision
+  /// \brief Set runtime precision on GPU using OpenCL backend.
+  ///
+  /// \param p
+  ///          CL_PRECISION_AUTO: first fp16 if valid, default
+  ///          CL_PRECISION_FP32: force fp32
+  ///          CL_PRECISION_FP16: force fp16
+  /// \return void
   void set_opencl_precision(CLPrecisionType p = CL_PRECISION_AUTO);
+
   // set subgraph_model_dir
   void set_subgraph_model_cache_dir(std::string subgraph_model_cache_dir) {
     subgraph_model_cache_dir_ = subgraph_model_cache_dir;
@@ -245,6 +281,16 @@ class LITE_API ConfigBase {
   }
   const std::string& nnadapter_model_cache_dir() const {
     return nnadapter_model_cache_dir_;
+  }
+  // Set dynamic shapes for building models
+  void set_nnadapter_dynamic_shape_info(
+      const std::map<std::string, std::vector<std::vector<int64_t>>>&
+          nnadapter_dynamic_shape_info) {
+    nnadapter_dynamic_shape_info_ = nnadapter_dynamic_shape_info;
+  }
+  const std::map<std::string, std::vector<std::vector<int64_t>>>&
+  nnadapter_dynamic_shape_info() const {
+    return nnadapter_dynamic_shape_info_;
   }
   // Set the buffers for loading the compiled NNAdapter models from memory.
   void set_nnadapter_model_cache_buffers(

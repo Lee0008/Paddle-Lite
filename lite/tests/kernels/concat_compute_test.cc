@@ -150,10 +150,13 @@ TEST(Concat, precision) {
 #if defined(NNADAPTER_WITH_HUAWEI_ASCEND_NPU)
   abs_error = 1e-2;
   axes = std::vector<int>{1, 2};
+#elif defined(NNADAPTER_WITH_CAMBRICON_MLU)
+  abs_error = 1e-5;
+  use_axis_tensor = std::vector<bool>{false};
 #else
   return;
 #endif
-#elif defined(LITE_WITH_XPU) && !defined(LITE_WITH_XTCL)
+#elif defined(LITE_WITH_XPU)
   place = TARGET(kXPU);
   use_axis_tensor = std::vector<bool>{false};
 #elif defined(LITE_WITH_NPU)

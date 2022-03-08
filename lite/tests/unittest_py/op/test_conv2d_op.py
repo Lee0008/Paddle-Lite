@@ -34,36 +34,75 @@ class TestConv2dOp(AutoScanTest):
             PrecisionType.FP32,
             DataLayoutType.NCHW,
             thread=[1, 4])
+
         self.enable_testing_on_place(
             TargetType.ARM,
-            [PrecisionType.FP32, PrecisionType.FP16, PrecisionType.INT8],
+            PrecisionType.FP32,
             DataLayoutType.NCHW,
             thread=[1, 4])
+
+        self.enable_testing_on_place(
+            TargetType.ARM,
+            PrecisionType.FP16,
+            DataLayoutType.NCHW,
+            thread=[1, 4])
+
+        # int8 has diff
+        # arm_places = [
+        #     Place(TargetType.ARM, PrecisionType.INT8, DataLayoutType.NCHW),
+        #     Place(TargetType.ARM, PrecisionType.FP32, DataLayoutType.NCHW)
+        # ]
+        # self.enable_testing_on_place(places=arm_places, thread=[1, 4])
+
+        opencl_places = [
+            Place(TargetType.OpenCL, PrecisionType.FP16,
+                  DataLayoutType.ImageDefault), Place(
+                      TargetType.OpenCL, PrecisionType.FP16,
+                      DataLayoutType.ImageFolder),
+            Place(TargetType.OpenCL, PrecisionType.FP32, DataLayoutType.NCHW),
+            Place(TargetType.OpenCL, PrecisionType.Any,
+                  DataLayoutType.ImageDefault), Place(
+                      TargetType.OpenCL, PrecisionType.Any,
+                      DataLayoutType.ImageFolder),
+            Place(TargetType.OpenCL, PrecisionType.Any, DataLayoutType.NCHW),
+            Place(TargetType.Host, PrecisionType.FP32)
+        ]
+        self.enable_testing_on_place(places=opencl_places)
+        metal_places = [
+            Place(TargetType.Metal, PrecisionType.FP16,
+                  DataLayoutType.MetalTexture2DArray),
+            Place(TargetType.Metal, PrecisionType.FP32,
+                  DataLayoutType.MetalTexture2DArray),
+            Place(TargetType.ARM, PrecisionType.FP32),
+            Place(TargetType.Host, PrecisionType.FP32)
+        ]
+        self.enable_testing_on_place(places=metal_places)
+        self.enable_testing_on_place(TargetType.NNAdapter, PrecisionType.FP32)
+        self.enable_devices_on_nnadapter(device_names=[
+            "kunlunxin_xtcl", "cambricon_mlu", "nvidia_tensorrt"
+        ])
 
     def is_program_valid(self,
                          program_config: ProgramConfig,
                          predictor_config: CxxConfig) -> bool:
-        if predictor_config.target() == TargetType.ARM:
-            return False
-        else:
-            return True
+        return True
 
     def sample_program_configs(self, draw):
-        in_shape = draw(
-            st.lists(
-                st.integers(
-                    min_value=1, max_value=64), min_size=4, max_size=4))
-        kw = np.random.randint(1, 9)
-        kh = np.random.randint(1, 9)
-        cout = np.random.randint(1, 128)
-        cin = np.random.randint(1, 128)
+        num = draw(st.integers(min_value=1, max_value=4))
+        cin = draw(st.integers(min_value=1, max_value=128))
+        cout = draw(st.integers(min_value=1, max_value=128))
+        height = draw(st.integers(min_value=1, max_value=128))
+        width = draw(st.integers(min_value=1, max_value=128))
+        kw = draw(st.integers(min_value=1, max_value=5))
+        kh = draw(st.integers(min_value=1, max_value=5))
+        groups = draw(st.integers(min_value=1, max_value=128))
         scale_in = draw(st.floats(min_value=0.001, max_value=0.1))
         scale_out = draw(st.floats(min_value=0.001, max_value=0.1))
-        weight_shape = [cout, cin, kh, kw]
-        groups = draw(st.sampled_from([1, 2, cin]))
-        val = in_shape[1] * groups
-        assume(val == cin)
-        assume(in_shape[1] == weight_shape[1])
+        assume(cin % groups == 0)
+        assume(cout % groups == 0)
+        w_cin = (int)(cin / groups)
+        in_shape = [num, cin, height, width]
+        weight_shape = [cout, w_cin, kh, kw]
         assume(in_shape[2] >= weight_shape[2])
         assume(in_shape[3] >= weight_shape[3])
 
@@ -75,6 +114,9 @@ class TestConv2dOp(AutoScanTest):
         padding_algorithm = draw(st.sampled_from(["VALID", "SAME"]))
         strides = draw(st.sampled_from([[1, 1], [2, 2]]))
         data_format = "NCHW"
+        use_mkldnn = False
+        if self.target[0] == "X86":
+            use_mkldnn = True
 
         def generate_input(*args, **kwargs):
             return np.random.random(in_shape).astype(np.float32)
@@ -85,18 +127,23 @@ class TestConv2dOp(AutoScanTest):
         def generate_bias(*args, **kwargs):
             return np.random.random([cout]).astype(np.float32)
 
+        inputs_data = {
+            "input_data": TensorConfig(data_gen=partial(generate_input))
+        }
+        inputs_type = {"Input": ["input_data"], "Filter": ["filter_data"]}
+        if use_mkldnn:
+            inputs_data["bias_data"] = TensorConfig(
+                data_gen=partial(generate_bias))
+            inputs_type["Bias"] = ["bias_data"]
+
         conv_op = OpConfig(
             type="conv2d",
-            inputs={
-                "Input": ["input_data"],
-                "Filter": ["filter_data"],
-                "Bias": ["bias_data"]
-            },
+            inputs=inputs_type,
             outputs={"Output": ["output_data"]},
             attrs={
                 "strides": strides,
                 "paddings": paddings,
-                "use_mkldnn": True,
+                "use_mkldnn": use_mkldnn,
                 "padding_algorithm": padding_algorithm,
                 "groups": groups,
                 "dilations": dilations,
@@ -107,21 +154,36 @@ class TestConv2dOp(AutoScanTest):
         program_config = ProgramConfig(
             ops=[conv_op],
             weights={
-                "filter_data": TensorConfig(data_gen=partial(generate_filter)),
-                "bias_data": TensorConfig(data_gen=partial(generate_bias))
+                "filter_data": TensorConfig(data_gen=partial(generate_filter))
             },
-            inputs={
-                "input_data": TensorConfig(data_gen=partial(generate_input))
-            },
+            inputs=inputs_data,
             outputs=["output_data"])
         return program_config
 
     def sample_predictor_configs(self):
-        config = CxxConfig()
-        return self.get_predictor_configs(), ["conv2d"], (1e-5, 1e-5)
+        atol, rtol = 1e-5, 1e-5
+        target_str = self.get_target()
+        if target_str == "Metal":
+            atol, rtol = 1e-3, 1e-3
+        return self.get_predictor_configs(), ["conv2d"], (atol, rtol)
 
     def add_ignore_pass_case(self):
-        pass
+        def _teller2(program_config, predictor_config):
+            target_type = predictor_config.target()
+            input_shape = program_config.inputs["input_data"].shape
+            filter_data = program_config.weights["filter_data"].shape
+            groups = program_config.ops[0].attrs["groups"]
+            if target_type == TargetType.Metal:
+                if groups != 1:
+                    return True
+                if input_shape[0] != 1 or input_shape[1] < 3 or filter_data[
+                        0] < 3:
+                    return True
+
+        self.add_ignore_check_case(
+            _teller2, IgnoreReasons.PADDLELITE_NOT_SUPPORT,
+            "Lite does not support this op in a specific case on metal. We need to fix it as soon as possible."
+        )
 
     def test(self, *args, **kwargs):
         self.run_and_statis(quant=False, max_examples=300)

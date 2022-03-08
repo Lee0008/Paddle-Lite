@@ -14,12 +14,23 @@
 
 import rpyc
 import os
+import re
 import shutil
 from rpyc.utils.server import ThreadedServer
 import paddlelite
 from paddlelite.lite import *
 import copy
 rpyc.core.protocol.DEFAULT_CONFIG['allow_pickle'] = True
+import argparse
+import platform
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--server_ip",
+    default="localhost",
+    type=str,
+    help="when rpc is used , the ip address of the server")
+
+args = parser.parse_args()
 
 
 def ParsePlaceInfo(place_str):
@@ -95,25 +106,31 @@ class RPCService(rpyc.Service):
 
         predictor = create_paddle_predictor(config)
 
+        # 3. optimized model
+        predictor.save_optimized_pb_model(self.cache_dir + "/opt_model")
+        with open(self.cache_dir + "/opt_model/model", "rb") as f:
+            model = f.read()
+
         for name in inputs:
             input_tensor = predictor.get_input_by_name(name)
             input_tensor.from_numpy(inputs[name]['data'])
             if inputs[name]['lod'] is not None:
                 input_tensor.set_lod(inputs[name]['lod'])
+
         predictor.run()
-        # 3. inference results
+        # 4. inference results
         result = {}
         for out_name in predictor.get_output_names():
             result[out_name] = predictor.get_output_by_name(out_name).numpy()
         result_res = copy.deepcopy(result)
-        # 4. optimized model
-        predictor.save_optimized_pb_model(self.cache_dir + "/opt_model")
-        with open(self.cache_dir + "/opt_model/model", "rb") as f:
-            model = f.read()
-
         return result_res, model
 
 
 if __name__ == "__main__":
-    server = ThreadedServer(RPCService, port=18812, hostname='localhost')
+    paddle_lite_path = os.path.abspath(__file__)
+    paddlelite_source_path = re.findall(r"(.+?)Paddle-Lite",
+                                        paddle_lite_path)[0]
+    rpc_port_file = paddlelite_source_path + "Paddle-Lite/lite/tests/unittest_py/rpc_service/.port_id"
+    port_id = int(open(rpc_port_file).read())
+    server = ThreadedServer(RPCService, port=port_id, hostname=args.server_ip)
     server.start()

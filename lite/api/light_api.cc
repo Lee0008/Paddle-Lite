@@ -220,6 +220,11 @@ void LightPredictor::BuildRuntimeProgram(
         scope_->Var(var_desc->Name());
       }
     }
+    auto op_size = block_desc->OpsSize();
+    for (size_t op_idx = 0; op_idx < op_size; ++op_idx) {
+      auto op_desc = block_desc->GetOp<cpp::OpDesc>(op_idx);
+      if (op_desc->Type() == "lod_array_length") bool_clear_tensor_ = true;
+    }
   }
   // Only extracting the ops and generate the runtime program from the main
   // block desc
@@ -228,6 +233,7 @@ void LightPredictor::BuildRuntimeProgram(
 
 void LightPredictor::DequantizeWeight() {
   std::shared_ptr<const cpp::ProgramDesc> program_desc = program_desc_;
+  CHECK(program_desc != nullptr);
 #define PROCESS_CONV2D_DATA()                                             \
   for (int64_t i = 0; i < ch; ++i) {                                      \
     for (int64_t j = 0; j < offset; ++j) {                                \
@@ -243,6 +249,7 @@ void LightPredictor::DequantizeWeight() {
   }
 
   auto is_weight_quantized_op = [](const cpp::OpDesc* op_desc) {
+    CHECK(op_desc != nullptr);
     bool result = false;
     if (op_desc->HasAttr("quantization_type")) {
       std::string type = op_desc->GetAttr<std::string>("quantization_type");
@@ -256,8 +263,10 @@ void LightPredictor::DequantizeWeight() {
   Tensor tmp_tensor;
   for (size_t i = 0; i < program_desc->BlocksSize(); i++) {
     auto* block = program_desc->GetBlock<cpp::BlockDesc>(i);
+    CHECK(block != nullptr);
     for (size_t k = 0; k < block->OpsSize(); ++k) {
       auto* op_desc = block->GetOp<cpp::OpDesc>(k);
+      CHECK(op_desc != nullptr);
       if (is_weight_quantized_op(op_desc)) {
         auto input_names = op_desc->input_vars();
         for (auto& input_name : input_names) {
@@ -278,6 +287,7 @@ void LightPredictor::DequantizeWeight() {
             }
             auto input_tensor =
                 scope_->FindVar(input_name)->GetMutable<lite::Tensor>();
+            CHECK(input_tensor != nullptr);
             tmp_tensor.CopyDataFrom(*input_tensor);
             auto scale_list =
                 op_desc->GetAttr<std::vector<float>>(input_scale_name);
@@ -286,6 +296,7 @@ void LightPredictor::DequantizeWeight() {
                 op_desc->GetAttr<int>("quantize_weight_bits");
             CHECK(quantize_weight_bits == 8 || quantize_weight_bits == 16);
             float* fp_data = input_tensor->mutable_data<float>();
+            CHECK(fp_data != nullptr);
 
             std::string op_type = op_desc->Type();
             if (op_type == "conv2d" || op_type == "depthwise_conv2d") {
@@ -294,9 +305,11 @@ void LightPredictor::DequantizeWeight() {
               CHECK_EQ(scale_list.size(), ch);
               if (quantize_weight_bits == 8) {
                 const int8_t* int_data = tmp_tensor.data<int8_t>();
+                CHECK(int_data != nullptr);
                 PROCESS_CONV2D_DATA()
               } else {
                 const int16_t* int_data = tmp_tensor.data<int16_t>();
+                CHECK(int_data != nullptr);
                 PROCESS_CONV2D_DATA()
               }
             } else if (op_type == "fc" || op_type == "mul" ||
@@ -306,9 +319,11 @@ void LightPredictor::DequantizeWeight() {
               CHECK_EQ(scale_list.size(), chout);
               if (quantize_weight_bits == 8) {
                 const int8_t* int_data = tmp_tensor.data<int8_t>();
+                CHECK(int_data != nullptr);
                 PROCESS_FC_DATA()
               } else {
                 const int16_t* int_data = tmp_tensor.data<int16_t>();
+                CHECK(int_data != nullptr);
                 PROCESS_FC_DATA()
               }
             }

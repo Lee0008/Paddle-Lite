@@ -53,6 +53,12 @@ TEST(MobileNetV1, test_mobilenet_v1_fp32_v1_8_nnadapter) {
 #elif defined(NNADAPTER_WITH_VERISILICON_TIMVX)
   nnadapter_device_names.emplace_back("verisilicon_timvx");
   out_accuracy_threshold = 0.79f;
+#elif defined(NNADAPTER_WITH_KUNLUNXIN_XTCL)
+  nnadapter_device_names.emplace_back("kunlunxin_xtcl");
+  out_accuracy_threshold = 0.79f;
+#elif defined(NNADAPTER_WITH_ANDROID_NNAPI)
+  nnadapter_device_names.emplace_back("android_nnapi");
+  out_accuracy_threshold = 0.99f;
 #else
   LOG(INFO) << "Unsupported NNAdapter device!";
   return;

@@ -250,12 +250,14 @@ TEST(squeeze, precision) {
   return;
 #elif defined(NNADAPTER_WITH_VERISILICON_TIMVX)
   abs_error = 5e-2;
+#elif defined(NNADAPTER_WITH_HUAWEI_KIRIN_NPU)
+  abs_error = 5e-2;
 #else
   return;
 #endif
 #elif defined(LITE_WITH_OPENCL)
   place = TARGET(kOpenCL);
-#elif defined(LITE_WITH_XPU) && !defined(LITE_WITH_XTCL)
+#elif defined(LITE_WITH_XPU)
   place = TARGET(kXPU);
 #elif defined(LITE_WITH_ARM) || defined(LITE_WITH_X86)
   place = TARGET(kHost);
@@ -279,12 +281,14 @@ TEST(squeeze2, precision) {
   return;
 #elif defined(NNADAPTER_WITH_VERISILICON_TIMVX)
   abs_error = 5e-2;
+#elif defined(NNADAPTER_WITH_HUAWEI_KIRIN_NPU)
+  abs_error = 5e-2;
 #else
   return;
 #endif
 #elif defined(LITE_WITH_OPENCL)
   place = TARGET(kOpenCL);
-#elif defined(LITE_WITH_XPU) && !defined(LITE_WITH_XTCL)
+#elif defined(LITE_WITH_XPU)
   place = TARGET(kXPU);
 #elif defined(LITE_WITH_ARM) || defined(LITE_WITH_X86)
   place = TARGET(kHost);
